@@ -1,0 +1,165 @@
+<!--
+  UR5e + 二指夹爪 MJCF（标准 DH 参数，双 body 结构）—— 备份
+  此文件为标准 DH 约定的运动学等价版本，FK 与 DH 公式误差 < 1e-15。
+  当前项目使用 ur5e_gripper.xml（quaternion 版本），本文件仅作备份/对照。
+
+  DH 约定: A_i = Rz(θ_i) Tz(d_i) Tx(a_{i-1}) Rx(α_{i-1})
+  转换规则（每关节两 body，保证 Rz(θ) 落在 Tz(d) 与 Tx(a)Rx(α) 之间）:
+    joint_i body:  pos=[0,0,d_i],            joint axis=[0,0,1]   -> Tz(d_i) Rz(θ_i)
+    offset_i body: pos=[a_{i-1},0,0], quat=Rx(α_{i-1})            -> Tx(a_{i-1}) Rx(α_{i-1})
+    合成 = Tz(d_i) Rz(θ_i) Tx(a_{i-1}) Rx(α_{i-1}) = Rz(θ_i) Tz(d_i) Tx(a_{i-1}) Rx(α_{i-1}) = A_i  ✓
+  当 a=0 且 α=0 时省略 offset body。
+  DH 表:
+    i | a_{i-1} | α_{i-1} | d_i
+    1 | 0       | 0       | 0.1635
+    2 | 0       | -90°    | 0
+    3 | 0.6225  | 0       | 0.0155
+    4 | 0.558   | 90°     | 0.149
+    5 | 0       | -90°    | -0.115
+    6 | 0       | 90°     | 0.115
+  FK 校验: 与标准 DH 公式最大误差 < 1e-15（机器精度）
+-->
+<mujoco model="ur5e_gripper_std_dh">
+  <compiler angle="radian" coordinate="local" autolimits="true"/>
+
+  <asset>
+    <material name="arm_mat"  rgba="0.75 0.75 0.78 1"/>
+    <material name="link_mat" rgba="0.25 0.25 0.28 1"/>
+    <material name="grip_mat" rgba="0.2 0.6 0.9 1"/>
+  </asset>
+
+  <default>
+    <joint damping="0.5" frictionloss="0.01"/>
+    <geom contype="1" conaffinity="1"/>
+  </default>
+
+  <worldbody>
+    <!-- 机械臂底座 -->
+    <body name="base" pos="-0.0723956 0 0.7798497">
+      <geom name="base" type="cylinder" size="0.07 0.08175" pos="0 0 0.08175" material="arm_mat"/>
+      <!-- 安装底座：高 0.8m，从 base 原点向下延伸 -->
+      <geom name="pedestal" type="cylinder" size="0.18 0.4" pos="0 0 -0.38" material="arm_mat"/>
+
+      <!-- ===== 关节1: shoulder_pan  d1=0.1635 ===== (a0=0,α0=0 省略 offset1) -->
+      <body name="shoulder_Link" pos="0 0 0.1635">
+        <inertial pos="0 0 0" mass="3.9912" diaginertia="0.01 0.02 0.02"/>
+        <joint name="shoulder_pan_joint" type="hinge" axis="0 0 1" range="-6.28 6.28"/>
+        <geom name="shoulder_pan" type="cylinder" size="0.06 0.03" material="arm_mat"/>
+
+        <!-- ===== 关节2: shoulder_lift  d2=0 ===== -->
+        <body name="shoulder_lift_Link" pos="0 0 0">
+          <inertial pos="0 0 0" mass="2.0" diaginertia="0.02 0.02 0.005"/>
+          <joint name="shoulder_lift" type="hinge" axis="0 0 1" range="-6.28 6.28"/>
+          <geom name="shoulder_lift" type="cylinder" size="0.06 0.03" material="arm_mat"/>
+
+          <!-- offset2: a1=0, α1=-90° -->
+          <body name="upper_arm" pos="0 0 0" axisangle="1 0 0 -1.5708">
+            <inertial pos="0.31125 0 0.00775" mass="13.9447" diaginertia="0.1 0.1 0.02"/>
+            <!-- 大臂沿本地 x，连接 upper_arm 原点 -> offset3 原点 -->
+            <geom name="upper_arm" type="capsule" fromto="0 0 0 0.6225 0 0.0155" size="0.05" material="link_mat"/>
+
+            <!-- ===== 关节3: elbow  d3=0.0155 ===== -->
+            <body name="elbow_Link" pos="0 0 0.0155">
+              <inertial pos="0 0 0" mass="1.0" diaginertia="0.005 0.005 0.002"/>
+              <joint name="elbow_joint" type="hinge" axis="0 0 1" range="-3.14 3.14"/>
+              <geom name="elbow" type="cylinder" size="0.05 0.025" material="arm_mat"/>
+
+              <!-- offset3: a2=0.6225, α2=0 -->
+              <body name="forearm" pos="0.6225 0 0">
+                <inertial pos="0.279 0 0.0745" mass="3.6632" diaginertia="0.05 0.05 0.01"/>
+                <!-- 小臂沿本地 x，连接 forearm 原点 -> offset4 原点 -->
+                <geom name="forearm" type="capsule" fromto="0 0 0 0.558 0 0.149" size="0.045" material="link_mat"/>
+
+                <!-- ===== 关节4: wrist_1  d4=0.149 ===== -->
+                <body name="wrist_1_Link" pos="0 0 0.149">
+                  <inertial pos="0 0 0" mass="1.226" diaginertia="0.005 0.005 0.002"/>
+                  <joint name="wrist_1_joint" type="hinge" axis="0 0 1" range="-6.28 6.28"/>
+                  <geom name="wrist_1" type="cylinder" size="0.045 0.025" material="arm_mat"/>
+
+                  <!-- offset4: a3=0.558, α3=90° -->
+                  <body name="wrist_1_off" pos="0.558 0 0" axisangle="1 0 0 1.5708">
+                    <inertial pos="0 0 0" mass="0.1" diaginertia="0.001 0.001 0.001"/>
+
+                    <!-- ===== 关节5: wrist_2  d5=-0.115 ===== -->
+                    <body name="wrist_2_Link" pos="0 0 -0.115">
+                      <inertial pos="0 0 0" mass="1.1122" diaginertia="0.005 0.005 0.002"/>
+                      <joint name="wrist_2_joint" type="hinge" axis="0 0 1" range="-6.28 6.28"/>
+                      <geom name="wrist_2" type="cylinder" size="0.045 0.025" material="arm_mat"/>
+
+                      <!-- offset5: a4=0, α4=-90° -->
+                      <body name="wrist_2_off" pos="0 0 0" axisangle="1 0 0 -1.5708">
+                        <inertial pos="0 0 0" mass="0.1" diaginertia="0.001 0.001 0.001"/>
+
+                        <!-- ===== 关节6: wrist_3  d6=0.115 ===== -->
+                        <body name="wrist_3_Link" pos="0 0 0.115">
+                          <inertial pos="0 0 0" mass="1.6897" diaginertia="0.002 0.002 0.001"/>
+                          <joint name="wrist_3_joint" type="hinge" axis="0 0 1" range="-6.28 6.28"/>
+                          <geom name="wrist_3" type="cylinder" size="0.04 0.02" material="arm_mat"/>
+
+                          <!-- 末端执行器参考点 = DH frame 6 原点 (法兰中心) -->
+                          <site name="attachment_site" pos="0 0 0" rgba="1 0 0 1"/>
+                          <!-- 代码兼容用的末端 site（与 attachment_site 同位置，供 IK/obs 读取） -->
+                          <site name="ee_link" pos="0 0 0" size="0.02"/>
+
+                          <body name="tcp_link" quat="1 0 0 0" pos="0 0 0.35">
+                            <geom name="tcp_link_geom" type="capsule" fromto="0 0 -0.5 0 0 0.5" size="0.005" rgba="1 0.2 0.2 0" contype="0" conaffinity="0"/>
+                          </body>
+
+                          <!-- offset6: a5=0, α5=90° (末端坐标系) -->
+                          <body name="ee_off" pos="0 0 0" axisangle="1 0 0 1.5708">
+                            <inertial pos="0 0 0" mass="1.5714" diaginertia="0.001 0.001 0.001"/>
+
+                            <!-- ===== 二指平行夹爪 ===== -->
+                            <body name="gripper_base" pos="0 0 -0.042">
+                              <geom name="gripper_base" type="box" size="0.04 0.08 0.03" pos="0 0 0.00" material="grip_mat"/>
+                              <body name="finger_left" pos="0 -0.0160500 -0.0874122">
+                                <joint name="finger_left" type="slide" axis="0 1 0" range="0 0.04"/>
+                                <geom name="finger_left" type="box" size="0.02 0.005 0.04" pos="0 -0.02 0.02" material="grip_mat"/>
+                              </body>
+                              <body name="finger_right" pos="0 0.0160500 -0.0874122">
+                                <joint name="finger_right" type="slide" axis="0 1 0" range="-0.04 0"/>
+                                <geom name="finger_right" type="box" size="0.02 0.005 0.04" pos="0 0.02 0.02" material="grip_mat"/>
+                              </body>
+                            </body>
+                          </body>
+                        </body>
+                      </body>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <!-- 执行器：位置控制（默认模式） -->
+  <actuator>
+    <position joint="shoulder_pan_joint"  name="pos_shoulder_pan_joint"  ctrlrange="-6.28 6.28" forcerange="-150 150" kp="200" kv="20"/>
+    <position joint="shoulder_lift"       name="pos_shoulder_lift"       ctrlrange="-6.28 6.28" forcerange="-150 150" kp="200" kv="20"/>
+    <position joint="elbow_joint"         name="pos_elbow_joint"         ctrlrange="-3.14 3.14" forcerange="-150 150" kp="200" kv="20"/>
+    <position joint="wrist_1_joint"       name="pos_wrist_1_joint"       ctrlrange="-6.28 6.28" forcerange="-28 28"   kp="50"  kv="5"/>
+    <position joint="wrist_2_joint"       name="pos_wrist_2_joint"       ctrlrange="-6.28 6.28" forcerange="-28 28"   kp="50"  kv="5"/>
+    <position joint="wrist_3_joint"       name="pos_wrist_3_joint"       ctrlrange="-6.28 6.28" forcerange="-28 28"   kp="50"  kv="5"/>
+    <position joint="finger_left"         name="pos_finger_left"         ctrlrange="0 0.04"     forcerange="-40 40"   kp="100" kv="10"/>
+    <!-- 力矩控制（torque 模式，默认 ctrl=0） -->
+    <motor joint="shoulder_pan_joint"  name="trq_shoulder_pan_joint"  ctrlrange="-150 150"/>
+    <motor joint="shoulder_lift"       name="trq_shoulder_lift"       ctrlrange="-150 150"/>
+    <motor joint="elbow_joint"         name="trq_elbow_joint"         ctrlrange="-150 150"/>
+    <motor joint="wrist_1_joint"       name="trq_wrist_1_joint"       ctrlrange="-28 28"/>
+    <motor joint="wrist_2_joint"       name="trq_wrist_2_joint"       ctrlrange="-28 28"/>
+    <motor joint="wrist_3_joint"       name="trq_wrist_3_joint"       ctrlrange="-28 28"/>
+  </actuator>
+
+  <!-- 约束：finger_right 镜像跟随 finger_left
+       polycoef="a0 a1 ..." 约束 pos(joint1) = a0 + a1*pos(joint2)
+       joint1=finger_right, joint2=finger_left, a0=0, a1=-1
+       => qpos(finger_right) = -qpos(finger_left)
+       finger_left range [0,0.04] 向 +y, finger_right range [-0.04,0] 向 -y
+       镜像开合，只需驱动 finger_left -->
+  <equality>
+    <joint joint1="finger_right" joint2="finger_left" polycoef="0 -1"/>
+  </equality>
+</mujoco>

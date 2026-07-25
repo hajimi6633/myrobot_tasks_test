@@ -1,0 +1,51 @@
+<!--
+  场景：工作台 + UR5e 机械臂（torque 控制版本）+ 灯光 + 可抓取物体
+  与 scene_table.xml 仅 <include> 行不同：此处 include ur5e_gripper_torque.xml。
+  调用方：ArmEnv(action_mode="torque") 自动加载本场景。
+-->
+<mujoco model="scene_table">
+  <compiler angle="radian" coordinate="local" autolimits="true" meshdir="meshes"/>
+
+  <option timestep="0.002" gravity="0 0 -9.81"/>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
+    <rgba haze="0.15 0.18 0.22 1"/>
+    <global azimuth="120" elevation="-20"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.5 0.6 0.7" rgb2="0 0 0" width="256" height="256"/>
+    <texture name="floor_tex" type="2d" builtin="checker" width="512" height="512" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"/>
+    <material name="floor_mat" texture="floor_tex" texrepeat="8 8" reflectance="0.2"/>
+    <material name="table_mat" rgba="0.4 0.3 0.2 1"/>
+  </asset>
+
+  <default>
+    <joint damping="0.5" frictionloss="0.01"/>
+    <geom contype="1" conaffinity="1"/>
+  </default>
+
+  <!-- 机械臂本体（torque 版本：臂关节 motor + 夹爪 position） -->
+  <include file="ur5e_gripper_torque.xml"/>
+
+  <worldbody>
+    <light name="spot" pos="0 0 3" dir="0 0 -1" directional="true"/>
+    <geom name="floor" type="plane" size="5 5 0.1" material="floor_mat"/>
+
+    <!-- 工作台：桌面表面 z=0.67985，承接机械臂 0.1m 底座 -->
+    <body name="table" pos="0 0.5 0">
+      <geom name="table_top" type="box" pos="0 0 0.85985" size="0.5 0.5 0.02" material="table_mat"/>
+      <geom name="table_leg1" type="box" pos="0.45 0.45 0.419925" size="0.02 0.02 0.419925"/>
+      <geom name="table_leg2" type="box" pos="-0.45 0.45 0.419925" size="0.02 0.02 0.419925"/>
+      <geom name="table_leg3" type="box" pos="0.45 -0.45 0.419925" size="0.02 0.02 0.419925"/>
+      <geom name="table_leg4" type="box" pos="-0.45 -0.45 0.419925" size="0.02 0.02 0.419925"/>
+    </body>
+
+    <!-- 可抓取物体（任务可动态生成/重置），放在新桌面 z=0.67985 上 -->
+    <body name="object" pos="0 0.5 0.90485">
+      <freejoint/>
+      <geom name="object" type="box" size="0.025 0.025 0.025" rgba="0.9 0.2 0.2 1" mass="0.5"/>
+    </body>
+  </worldbody>
+</mujoco>

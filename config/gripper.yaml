@@ -1,0 +1,10 @@
+# 二指平行夹爪配置
+# 所有模型相关的"名字"集中在此：更换模型时只需改这里，不必动代码。
+# 数值（range / ctrlrange / kp 等）一律从 model 动态读取，避免与 MJCF 不一致。
+gripper:
+  # slide joint 名（left 为主驱动，right 由 equality 镜像跟随）
+  left_joint: "ll_grasp_joint"
+  right_joint: "rl_grasp_joint"
+  # 手指 body 名（用于接触力检测，遍历 contact 时判断是否为手指）
+  left_body: "finger_left"
+  right_body: "finger_right"

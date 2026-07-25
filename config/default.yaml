@@ -1,0 +1,36 @@
+# 仿真全局参数
+sim:
+  timestep: 0.002        # MuJoCo 步长 (s)，500Hz
+  n_substeps: 20         # 每次 env.step() 内部 mj_step 次数 -> 100Hz 控制频率
+  gravity: [0, 0, -9.81]
+  seed: 0
+
+# 模型路径（支持相对项目根，也支持绝对路径 / Windows 盘符路径）
+#   scene_xml —— position 模式场景（当前使用独立完整场景 scene_1300.xml，绝对路径）
+model:
+  scene_xml: "D:/py_projects/Flash_Manipulator/model/flash_manipulator/scene_1300.xml"
+
+# action 模式：position（torque 模式暂未启用）
+control:
+  action_mode: "position"
+  # 关节位置 PD（MuJoCo position actuator 内置增益，此处用于 torque 模式手动 PD）
+  kp: [200, 200, 200, 200, 50, 50, 50]
+  kv: [20, 20, 20, 20, 5, 5, 5]
+  # 关节角速度上限（rad/s），用于 clamp
+  max_joint_vel: 3.14
+  # 力矩上限（Nm）
+  max_torque: 150.0
+
+# 位姿数据来源：gt | vision
+#   gt      直接读 MuJoCo 真值（零延迟、无噪声）
+#   vision  走 VisionPoseProvider（占位，未实现检测时自动回退 gt）
+pose:
+  source: "gt"
+  # vision 模式专用：未实现检测的 body 是否回退真值
+  fallback_to_gt: true
+  # 相机名（MuJoCo camera，对应 MJCF 中 <camera name=...>）
+  camera_name: "track"
+
+gripper:
+  stroke: 0.08           # 最大开合距离 (m)
+  close_force: 40.0      # 夹持力上限 (N)

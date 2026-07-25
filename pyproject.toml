@@ -1,0 +1,18 @@
+[project]
+name = "robot-arm-mujoco"
+version = "0.1.0"
+description = "6DOF arm (UR5e) simulation framework on MuJoCo"
+requires-python = ">=3.10"
+dependencies = [
+    "mujoco>=3.1",
+    "numpy",
+    "scipy",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+rl = ["gymnasium"]
+view = ["mujoco-python-viewer"]
+
+[tool.setuptools]
+packages = ["src"]

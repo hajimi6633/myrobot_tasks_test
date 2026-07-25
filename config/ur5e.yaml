@@ -1,0 +1,29 @@
+# 机械臂关节配置（按标准 DH 参数）
+# DH 约定: a_{i-1}, α_{i-1}, d_i, θ_i
+# 真实运动学参数在 models/ur5e_gripper.xml 中定义，此文件供代码侧引用
+joints:
+  names: ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
+  dof: 6
+  # 关节限位 (rad) [lower, upper]（占位宽范围，按实际机械臂规格收紧）
+  limits:
+    shoulder_pan_joint: [-6.28, 6.28]
+    shoulder_lift_joint: [-6.28, 6.28]
+    elbow_joint:        [-3.14, 3.14]
+    wrist_1_joint:      [-6.28, 6.28]
+    wrist_2_joint:      [-6.28, 6.28]
+    wrist_3_joint:      [-6.28, 6.28]
+  # 默认 home 位姿 (rad)
+  home_qpos: [-1.5708, 0.0, 1.5708, 0.0, 1.5708, 0.0]
+
+# 标准 DH 参数表（与 MJCF 一致，供运动学计算/校验）
+dh:
+  # a_{i-1} (m)
+  a:   [0.0, 0.0, 0.6225, 0.558, 0.0, 0.0]
+  # α_{i-1} (rad)
+  alpha: [0.0, -1.5708, 0.0, 1.5708, -1.5708, 1.5708]
+  # d_i (m)
+  d:   [0.1635, 0.0, 0.0155, 0.149, -0.115, 0.115]
+
+# 末端执行器 site 名（用于 IK / 末端位姿读取）
+# ee_link 位于关节6原点 = 法兰中心
+ee_site: "ee_link"
