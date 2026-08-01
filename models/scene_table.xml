@@ -33,7 +33,7 @@
     <geom name="floor" type="plane" size="5 5 0.1" material="floor_mat"/>
 
     <!-- 工作台：桌面表面 z=0.67985，承接机械臂 0.1m 底座 -->
-    <body name="table" pos="0 0.5 0">
+    <!-- <body name="table" pos="0 0.5 0">
       <geom name="table_top" type="box" pos="0 0 0.85985" size="0.5 0.5 0.02" material="table_mat"/>
       <geom name="table_leg1" type="box" pos="0.45 0.45 0.419925" size="0.02 0.02 0.419925"/>
       <geom name="table_leg2" type="box" pos="-0.45 0.45 0.419925" size="0.02 0.02 0.419925"/>
@@ -41,10 +41,60 @@
       <geom name="table_leg4" type="box" pos="-0.45 -0.45 0.419925" size="0.02 0.02 0.419925"/>
     </body>
 
-    <!-- 可抓取物体（任务可动态生成/重置），放在新桌面 z=0.67985 上 -->
-    <body name="object" pos="0 0.5 0.90485">
+    <!-- 可抓取物体（任务可动态生成/重置），放在新桌面顶面 z=0.87985 上 -->
+    <body name="object" pos="0 0.5 0.91485">
       <freejoint/>
-      <geom name="object" type="box" size="0.025 0.025 0.025" rgba="0.9 0.2 0.2 1" mass="0.5"/>
+      <geom name="object" type="box" size="0.035 0.035 0.035" rgba="0.9 0.2 0.2 1" mass="0.1"/>
+    </body> -->
+
+    <!-- 充电枪 1 -->
+    <body name="charging_gun_1" pos="1.0888363 -0.073997 0.831233" quat="0.608761 0 0.793353 0">
+      <geom name="gun_col_1" type="cylinder" size="0.05 0.05" rgba="0.9 0.2 0.2 1" mass="0.1"/>
+      <geom name="gun_col_2" type="box" size="0.01 0.01 0.06" rgba="0.9 0.2 0.2 1" pos="0.01 0 -0.309" quat="1 0 1 0"/>
+      <geom name="gun_col_3" type="box" size="0.01 0.02 0.04" rgba="0.9 0.2 0.2 1" pos="-0.047100 0 -0.2680715" quat="1 0 0 0"/>
+      <geom name="gun_col_4" type="box" size="0.01 0.02 0.04" rgba="0.9 0.2 0.2 1" pos="0.065 0 -0.2680715" quat="1 0 0 0"/>
+      <geom name="gun_col_5" type="box" size="0.01 0.02 0.06" rgba="0.9 0.2 0.2 1" pos="0.0 0 -0.22780715" quat="1 0 1 0"/>
+      <site name="gun_site_1" type="sphere" rgba="1 0 1 1" size="0.01" pos="0 0 -0.3058310"/>
+      <site name="gun_site_2" type="sphere" rgba="1 0 1 1" size="0.01" pos="0 0 -0.3958310"/>
+    </body>
+
+    <!-- 充电插座 -->
+    <body name="charing_socket" pos="-0.2276 -0.073997 0.8652439" quat="1 0 -1 0">
+      <geom  type="box" size="0.003111 0.0477071 0.0090" pos="0.0647513 0 0" euler="0 1.5708 0" rgba="0.9 0.2 0.2 1"/>
+      <geom  type="box" size="0.003111 0.0477071 0.00631"  pos="-0.0679513 0 0" euler="0 1.5708 0" rgba="0.9 0.2 0.2 1"/>
+      <geom  type="box" size="0.006111 0.0077071 0.004012" pos="0.0 0.0600513 0" euler="0 0 0" rgba="0.9 0.2 0.2 1"/>
+      <geom  type="box" size="0.006111 0.0077071 0.004012" pos="0.0  -0.0600513 0" euler="0 0 0" rgba="0.9 0.2 0.2 1"/>
+      <body pos="-0.02224507183 0 -0.02793572044" quat="0.9909 0 0.1348 0">
+        <replicate count="60" euler="0 0 0.10472">
+          <geom type="box" pos="0.0373038 0 -0.023550" size="0.003111 0.0077071 0.023750" euler="0 0 0" rgba="0.8 0 0 0"/>
+        </replicate>
+        <replicate count="60" euler="0 0 0.10472">
+          <geom type="box" pos="0.01812543233 0.03511920368 0.0083194332" size="0.000111 0.0027071 0.00999215143" euler="-0.5182 0.2094 1.1272" rgba="0.8 0 0 0"/>
+        </replicate>
+        <replicate count="40" euler="0 0 0.10472">
+          <geom type="box" pos="-0.0286881 -0.0491817 0.0215" size="0.000111 0.0027071 0.010650" euler="0.4382 -0.3094 1.1272" rgba="0.8 0 0 0"/>
+        </replicate>
+      </body>
+    </body>
+
+    <!-- 车辆插座 -->
+    <body name="car_socket" pos="0.3 -0.875 1.05" quat="0.541675 -0.454519 -0.454519 -0.541675">
+      <site name="car_site_1" type="sphere" rgba="1 0 1 1" size="0.01" pos="0 0 0"/>
+      <site name="car_site_2" type="sphere" rgba="1 0 1 1" size="0.01" pos="0 0 0.1"/>
+      <replicate count="60" euler="0 0 0.10472">
+        <geom type="box" pos="0 -0.0333038 -0.0005" size="0.00111 0.007071 0.02650" euler="-0.78540 1.57080 0" rgba="0.8 0 0 1"/>
+      </replicate>
+      <replicate count="30" offset="0 -0.001 0" euler="0 0 0">
+        <geom type="box" pos="0.029100 0.0133829 -0.0005" size="0.000011 0.0007071 0.0007070" euler="0 0.78540 0" rgba="0.8 0 0 1"/>
+      </replicate>
+      <replicate count="60" euler="0 0 0.10472">
+        <geom type="box" pos="0.0373038 0 -0.023550" size="0.003111 0.0077071 0.023750" euler="0 0 0" rgba="0.8 0 0 1"/>
+      </replicate>
     </body>
   </worldbody>
+
+  <!-- 焊接约束：充电枪 1 固定到充电插座 -->
+  <equality>
+    <weld name="eq_socgun_1" body1="charing_socket" body2="charging_gun_1" active="true" anchor="0 0 0"/>
+  </equality>
 </mujoco>

@@ -67,8 +67,6 @@
 
                   <!-- 末端执行器参考点 = DH frame 6 原点 (法兰中心) -->
                   <site name="attachment_site" pos="0 0 0" rgba="1 0 0 1"/>
-                  <!-- 代码兼容用的末端 site（与 attachment_site 同位置，供 IK/obs 读取） -->
-                  <site name="ee_link" pos="0 0 0" size="0.02"/>
 
                   <body name="tcp_link" quat="1 0 0 0" pos="0 0 0.35">
                     <geom name="tcp_link_geom" type="capsule" fromto="0 0 -0.5 0 0 0.5" size="0.005" rgba="1 0.2 0.2 0" contype="0" conaffinity="0"/>
@@ -81,6 +79,9 @@
                     <!-- ===== 二指平行夹爪 ===== -->
                     <body name="gripper_base" pos="0 0 -0.042">
                       <geom name="gripper_base" type="box" size="0.04 0.08 0.03" pos="0 0 0.00" material="grip_mat"/>
+                      <!-- 代码兼容用的末端 site（两手指中点，供 IK/obs 读取）
+                           位于 gripper_base 内 z=-0.072，对应两手指几何中点高度 -->
+                      <site name="ee_link" pos="0 0 -0.072" size="0.02"/>
                       <body name="finger_left" pos="0 -0.0160500 -0.0874122">
                         <joint name="ll_grasp_joint" type="slide" axis="0 1 0" range="-0.025 0.009"/>
                         <geom name="finger_left" type="box" size="0.02 0.005 0.04" pos="0 -0.02 0.02" material="grip_mat"/>
