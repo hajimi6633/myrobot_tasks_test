@@ -47,15 +47,18 @@
       <geom name="object" type="box" size="0.035 0.035 0.035" rgba="0.9 0.2 0.2 1" mass="0.1"/>
     </body> -->
 
-    <!-- 充电枪 1 -->
+    <!-- 充电枪 1：freejoint 使其可被抓取移动，初始由 eq_socgun_1 weld 固定在插座 -->
     <body name="charging_gun_1" pos="1.0888363 -0.073997 0.831233" quat="0.608761 0 0.793353 0">
+      <freejoint/>
       <geom name="gun_col_1" type="cylinder" size="0.05 0.05" rgba="0.9 0.2 0.2 1" mass="0.1"/>
       <geom name="gun_col_2" type="box" size="0.01 0.01 0.06" rgba="0.9 0.2 0.2 1" pos="0.01 0 -0.309" quat="1 0 1 0"/>
       <geom name="gun_col_3" type="box" size="0.01 0.02 0.04" rgba="0.9 0.2 0.2 1" pos="-0.047100 0 -0.2680715" quat="1 0 0 0"/>
       <geom name="gun_col_4" type="box" size="0.01 0.02 0.04" rgba="0.9 0.2 0.2 1" pos="0.065 0 -0.2680715" quat="1 0 0 0"/>
       <geom name="gun_col_5" type="box" size="0.01 0.02 0.06" rgba="0.9 0.2 0.2 1" pos="0.0 0 -0.22780715" quat="1 0 1 0"/>
+      <geom name="gun_col_6" type="cylinder" size="0.05 0.01" rgba="0.9 0.2 0.2 1" pos="0.0 0 -0.1" quat="1 0 0 0" solref="0.06 1"/>
       <site name="gun_site_1" type="sphere" rgba="1 0 1 1" size="0.01" pos="0 0 -0.3058310"/>
       <site name="gun_site_2" type="sphere" rgba="1 0 1 1" size="0.01" pos="0 0 -0.3958310"/>
+      <site name="gun_site" type="sphere" rgba="1 0 1 1" size="0.01" pos="0 0 0"/>
     </body>
 
     <!-- 充电插座 -->
@@ -75,12 +78,15 @@
           <geom type="box" pos="-0.0286881 -0.0491817 0.0215" size="0.000111 0.0027071 0.010650" euler="0.4382 -0.3094 1.1272" rgba="0.8 0 0 0"/>
         </replicate>
       </body>
+      <site name="charing_site_1" type="sphere" rgba="1 0 1 1" size="0.01" quat="0.9909 0 0.1348 0" pos="-0.02 0 0"/>
+      <site name="charing_site_2" type="sphere" rgba="1 0 1 1" size="0.01" quat="0.9909 0 0.1348 0" pos="-0.01 0 0.07"/>
     </body>
 
     <!-- 车辆插座 -->
     <body name="car_socket" pos="0.3 -0.875 1.05" quat="0.541675 -0.454519 -0.454519 -0.541675">
       <site name="car_site_1" type="sphere" rgba="1 0 1 1" size="0.01" pos="0 0 0"/>
       <site name="car_site_2" type="sphere" rgba="1 0 1 1" size="0.01" pos="0 0 0.1"/>
+      <site name="car_site_done" type="sphere" rgba="1 0 1 1" size="0.01" pos="0 0 -0.1"/>
       <replicate count="60" euler="0 0 0.10472">
         <geom type="box" pos="0 -0.0333038 -0.0005" size="0.00111 0.007071 0.02650" euler="-0.78540 1.57080 0" rgba="0.8 0 0 1"/>
       </replicate>
@@ -93,8 +99,19 @@
     </body>
   </worldbody>
 
-  <!-- 焊接约束：充电枪 1 固定到充电插座 -->
+  <!-- 焊接约束：
+       eq_socgun_1: 充电枪 1 固定到充电插座（初始 active=true，抓取后置 false）
+       eq_gun_ee: 充电枪 1 固定到末端 gripper_base（初始 active=false，抓取成功后置 true，
+                  代码会在激活瞬间写入当前相对位姿，保证 weld 保持抓取姿态） -->
   <equality>
     <weld name="eq_socgun_1" body1="charing_socket" body2="charging_gun_1" active="true" anchor="0 0 0"/>
+    <weld name="eq_gun_ee" body1="gripper_base" body2="charging_gun_1" active="false" anchor="0 0 0"/>
   </equality>
+
+  <!-- 六维力传感器：读取作用在 gun_site 所在 body(charging_gun_1) 上的合力/合力矩
+       读数为 subtree 合力(含重力)，代码侧需做重力补偿得到纯接触力 -->
+  <sensor>
+    <force name="gun_force" site="gun_site"/>
+    <torque name="gun_torque" site="gun_site"/>
+  </sensor>
 </mujoco>

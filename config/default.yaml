@@ -1,14 +1,14 @@
 # 仿真全局参数
 sim:
   timestep: 0.002        # MuJoCo 步长 (s)，500Hz
-  n_substeps: 20         # 每次 env.step() 内部 mj_step 次数 -> 100Hz 控制频率
+  n_substeps: 25         # 每次 env.step() 内部 mj_step 次数 -> 50Hz 控制频率 (ctrl_dt=0.05s)
   gravity: [0, 0, -9.81]
   seed: 0
 
 # 模型路径（支持相对项目根，也支持绝对路径 / Windows 盘符路径）
-#   scene_xml —— position 模式场景（当前使用独立完整场景 scene_1300.xml，绝对路径）
+#   scene_xml —— position 模式场景（充电枪任务使用 models/scene_table.xml）
 model:
-  scene_xml: "D:/py_projects/Flash_Manipulator/model/flash_manipulator/scene_1300.xml"
+  scene_xml: "models/scene_table.xml"
 
 # action 模式：position（torque 模式暂未启用）
 control:

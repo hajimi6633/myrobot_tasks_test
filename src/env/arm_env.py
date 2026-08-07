@@ -90,6 +90,9 @@ class ArmEnv:
         self.n_substeps = self.cfg["sim"]["n_substeps"]
         self.home_qpos = np.array(self.ur5e_cfg["joints"]["home_qpos"], dtype=float)
 
+        # 每步物理推进后、obs 构建前的回调（如抓取耦合更新枪位姿）
+        self._post_step_hooks: list = []
+
     # ---------- actuator 收集 ----------
     def _collect_actuators(self, prefix: str) -> dict:
         """按 name 前缀筛选 actuator，返回 {关节名: actuator_id}。
@@ -158,6 +161,10 @@ class ArmEnv:
         # 物理推进后刷新位姿提供者缓存（视觉算法在此跑检测，GT 无操作）
         self.pose_provider.update()
 
+        # 执行每步后回调（抓取耦合在此更新被夹物体位姿并 mj_forward）
+        for fn in self._post_step_hooks:
+            fn()
+
         obs = self._build_obs()
         reward, done, info = 0.0, False, {}
         if self.task is not None:
@@ -185,9 +192,87 @@ class ArmEnv:
         """返回指定 body (pos[3], rot_mat[3,3])，来源取决于 pose_provider。"""
         return self.pose_provider.get_body_pose(name)
 
+    def site_pose(self, name: str) -> tuple[np.ndarray, np.ndarray]:
+        """返回 site 的世界位姿 (pos[3], rot_mat[3,3])。直接读 MuJoCo 派生量。"""
+        sid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, name)
+        if sid < 0:
+            raise ValueError(f"site '{name}' not found")
+        pos = self.data.site_xpos[sid].copy()
+        mat = self.data.site_xmat[sid].reshape(3, 3).copy()
+        return pos, mat
+
+    def body_collides_with(self, body_name: str, other_body_name: str) -> bool:
+        """判断两 body 的 geom 是否当前存在接触。"""
+        b1 = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        b2 = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, other_body_name)
+        if b1 < 0 or b2 < 0:
+            return False
+        g1s = set(range(self.model.body_geomadr[b1],
+                        self.model.body_geomadr[b1] + self.model.body_geomnum[b1]))
+        g2s = set(range(self.model.body_geomadr[b2],
+                        self.model.body_geomadr[b2] + self.model.body_geomnum[b2]))
+        for i in range(self.data.ncon):
+            c = self.data.contact[i]
+            if ((c.geom1 in g1s and c.geom2 in g2s) or
+                    (c.geom2 in g1s and c.geom1 in g2s)):
+                return True
+        return False
+
+    def geom_body_collides(self, geom_name: str, body_name: str) -> bool:
+        """判断指定 geom 是否与某 body 的 geom 接触。"""
+        gid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom_name)
+        bid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        if gid < 0 or bid < 0:
+            return False
+        gbs = set(range(self.model.body_geomadr[bid],
+                        self.model.body_geomadr[bid] + self.model.body_geomnum[bid]))
+        for i in range(self.data.ncon):
+            c = self.data.contact[i]
+            if ((c.geom1 == gid and c.geom2 in gbs) or
+                    (c.geom2 == gid and c.geom1 in gbs)):
+                return True
+        return False
+
+    def contact_force_between(self, body1_name: str, body2_name: str) -> np.ndarray:
+        """计算 body1 受到的来自 body2 的接触力合力（世界系 [fx,fy,fz]）。
+
+        mj_contactForce 返回接触约束力（contact frame），contact.frame 的法向
+        从 geom1 指向 geom2。R@f 是作用在 geom2 上的力（推开 geom2）。
+        故需要根据 geom 归属决定符号，才能得到 body1 受力。
+        """
+        b1 = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body1_name)
+        b2 = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body2_name)
+        if b1 < 0 or b2 < 0:
+            return np.zeros(3)
+        g1s = set(range(self.model.body_geomadr[b1],
+                        self.model.body_geomadr[b1] + self.model.body_geomnum[b1]))
+        g2s = set(range(self.model.body_geomadr[b2],
+                        self.model.body_geomadr[b2] + self.model.body_geomnum[b2]))
+        f_total = np.zeros(3)
+        for i in range(self.data.ncon):
+            c = self.data.contact[i]
+            f = np.zeros(6)
+            R = c.frame.reshape(3, 3)
+            if c.geom1 in g1s and c.geom2 in g2s:
+                # 法向 body1→body2，R@f 是 body2 受力；body1 受力 = -(R@f)
+                mujoco.mj_contactForce(self.model, self.data, i, f)
+                f_total -= R @ f[:3]
+            elif c.geom2 in g1s and c.geom1 in g2s:
+                # 法向 body2→body1，R@f 是 body1 受力
+                mujoco.mj_contactForce(self.model, self.data, i, f)
+                f_total += R @ f[:3]
+        return f_total
+
     def joint_state(self) -> tuple[np.ndarray, np.ndarray]:
         return (self.data.qpos[self.arm_qposadr].copy(),
                 self.data.qvel[self.arm_dofadr].copy())
+
+    # ---------- 每步回调（抓取耦合等）----------
+    def add_post_step_hook(self, fn):
+        self._post_step_hooks.append(fn)
+
+    def clear_post_step_hooks(self):
+        self._post_step_hooks.clear()
 
     # ---------- viewer ----------
     def launch_viewer(self):
