@@ -91,6 +91,12 @@ class ChargingGunTask(BaseTask):
     CAR_SITE_DONE = "car_site_done"
     EQ_SOCKET = "eq_socgun_1"     # 枪-插座 weld
     GUN_COL_6 = "gun_col_6"
+    # 枪头圆盘子 body（无 joint，随枪刚性运动）。插入成功判定：
+    # gun_pan 与 car_socket 发生接触（枪头已深入插座到底）
+    GUN_PAN_BODY = "gun_pan"
+    # 充电插座内检测盘 body（薄圆盘，位于弹片通道内）。归位到位判定：
+    # charging_gun_1 与 charing_pan 发生接触（枪已插回充电插座）
+    CHARGING_PAN_BODY = "charing_pan"
 
     def __init__(self):
         super().__init__()

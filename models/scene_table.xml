@@ -50,15 +50,19 @@
     <!-- 充电枪 1：freejoint 使其可被抓取移动，初始由 eq_socgun_1 weld 固定在插座 -->
     <body name="charging_gun_1" pos="1.0888363 -0.073997 0.831233" quat="0.608761 0 0.793353 0">
       <freejoint/>
-      <geom name="gun_col_1" type="cylinder" size="0.05 0.05" rgba="0.9 0.2 0.2 1" mass="0.1"/>
-      <geom name="gun_col_2" type="box" size="0.01 0.01 0.06" rgba="0.9 0.2 0.2 1" pos="0.01 0 -0.309" quat="1 0 1 0"/>
-      <geom name="gun_col_3" type="box" size="0.01 0.02 0.04" rgba="0.9 0.2 0.2 1" pos="-0.047100 0 -0.2680715" quat="1 0 0 0"/>
-      <geom name="gun_col_4" type="box" size="0.01 0.02 0.04" rgba="0.9 0.2 0.2 1" pos="0.065 0 -0.2680715" quat="1 0 0 0"/>
-      <geom name="gun_col_5" type="box" size="0.01 0.02 0.06" rgba="0.9 0.2 0.2 1" pos="0.0 0 -0.22780715" quat="1 0 1 0"/>
-      <geom name="gun_col_6" type="cylinder" size="0.05 0.01" rgba="0.9 0.2 0.2 1" pos="0.0 0 -0.1" quat="1 0 0 0" solref="0.06 1"/>
-      <site name="gun_site_1" type="sphere" rgba="1 0 1 1" size="0.01" pos="0 0 -0.3058310"/>
-      <site name="gun_site_2" type="sphere" rgba="1 0 1 1" size="0.01" pos="0 0 -0.3958310"/>
-      <site name="gun_site" type="sphere" rgba="1 0 1 1" size="0.01" pos="0 0 0"/>
+      <geom name="gun_col_1" type="cylinder" size="0.025 0.05" rgba="0.9 0.2 0.2 1" mass="0.1"/>
+      <geom name="gun_col_2" type="box" size="0.01 0.03 0.06" rgba="0.9 0.2 0.2 1" pos="0.01 0 -0.309" quat="1 0 1 0"/>
+      <geom name="gun_col_3" type="box" size="0.01 0.03 0.04" rgba="0.9 0.2 0.2 1" pos="-0.047100 0 -0.2680715" quat="1 0 0 0"/>
+      <geom name="gun_col_4" type="box" size="0.01 0.03 0.04" rgba="0.9 0.2 0.2 1" pos="0.065 0 -0.2680715" quat="1 0 0 0"/>
+      <geom name="gun_col_5" type="box" size="0.01 0.03 0.06" rgba="0.9 0.2 0.2 1" pos="0.0 0 -0.22780715" quat="1 0 1 0"/>
+      <!-- 枪头圆盘独立为子 body gun_pan（无 joint，随枪体刚性运动）：
+           插入成功判定 = gun_pan 与 car_socket 发生接触 -->
+      <body name="gun_pan">
+        <geom name="gun_col_6" type="cylinder" size="0.05 0.01" rgba="0.9 0.2 0.2 1" pos="0.0 0 -0.1" quat="1 0 0 0" solref="0.06 1"/>
+      </body>
+      <site name="gun_site_1" type="sphere" rgba="1 0 1 1" size="0.01" quat="1 0 0 -1" pos="0 0 -0.3058310"/>
+      <site name="gun_site_2" type="sphere" rgba="1 0 1 1" size="0.01" quat="1 0 0 -1" pos="0 0 -0.3958310"/>
+      <site name="gun_site" type="sphere" rgba="1 0 1 1" size="0.01" quat="1 0 0 -1" pos="0 0 0"/>
     </body>
 
     <!-- 充电插座 -->
@@ -78,15 +82,20 @@
           <geom type="box" pos="-0.0286881 -0.0491817 0.0215" size="0.000111 0.0027071 0.010650" euler="0.4382 -0.3094 1.1272" rgba="0.8 0 0 0"/>
         </replicate>
       </body>
-      <site name="charing_site_1" type="sphere" rgba="1 0 1 1" size="0.01" quat="0.9909 0 0.1348 0" pos="-0.02 0 0"/>
-      <site name="charing_site_2" type="sphere" rgba="1 0 1 1" size="0.01" quat="0.9909 0 0.1348 0" pos="-0.01 0 0.07"/>
+      <site name="charing_site_1" type="sphere" rgba="1 0 1 1" size="0.01" quat="0.0953 0.7007 -0.7007 -0.0953" pos="-0.02 0 0"/>
+      <site name="charing_site_2" type="sphere" rgba="1 0 1 1" size="0.01" quat="0.0953 0.7007 -0.7007 -0.0953" pos="-0.01 0 0.07"/>
+      <!-- 归位到位检测盘：薄圆盘（r=0.04 > 枪头 col_1 的 0.025）位于
+           弹片通道内，姿态与弹片子 body 对齐。枪插入到底时枪体抵住即到位 -->
+      <body name="charing_pan" pos="-0.033 0 -0.065" quat="0.9909 0 0.1348 0">
+        <geom  type="cylinder" size="0.04 0.001" rgba="0.2 0.8 0.2 1" solref="0.06 1" priority="1"/>
+      </body>
     </body>
 
     <!-- 车辆插座 -->
     <body name="car_socket" pos="0.3 -0.875 1.05" quat="0.541675 -0.454519 -0.454519 -0.541675">
-      <site name="car_site_1" type="sphere" rgba="1 0 1 1" size="0.01" pos="0 0 0"/>
-      <site name="car_site_2" type="sphere" rgba="1 0 1 1" size="0.01" pos="0 0 0.1"/>
-      <site name="car_site_done" type="sphere" rgba="1 0 1 1" size="0.01" pos="0 0 -0.1"/>
+      <site name="car_site_1" type="sphere" rgba="1 0 1 1" size="0.01" quat="0 0.7071 -0.7071 0" pos="0 0 0"/>
+      <site name="car_site_2" type="sphere" rgba="1 0 1 1" size="0.01" quat="0 0.7071 -0.7071 0" pos="0 0 0.1"/>
+      <site name="car_site_done" type="sphere" rgba="1 0 1 1" size="0.01" quat="0 0.7071 -0.7071 0" pos="0 0 -0.1"/>
       <replicate count="60" euler="0 0 0.10472">
         <geom type="box" pos="0 -0.0333038 -0.0005" size="0.00111 0.007071 0.02650" euler="-0.78540 1.57080 0" rgba="0.8 0 0 1"/>
       </replicate>

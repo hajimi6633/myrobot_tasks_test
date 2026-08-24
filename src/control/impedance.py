@@ -38,13 +38,32 @@ class AdmittanceController:
 
         f_ext: 世界系末端外力 [fx,fy,fz]（N），来自力传感器
         dt: 控制周期 (s)
+
+        内置两级稳定措施（碰撞冲击下防发散）：
+        1. 力输入限幅：冲击力截断到 F_CLIP，避免瞬时大力把 delta_dot 打飞
+        2. delta 限速：每步偏移增量截断，保证输出连续平滑
         """
         f = np.asarray(f_ext, dtype=float).reshape(3)
+        # 力输入限幅：碰撞瞬间的冲击力远超稳态接触力，直接截断
+        F_CLIP = 30.0
+        f = np.clip(f, -F_CLIP, F_CLIP)
+        # 增量限速的基准必须在积分【前】记录——若积分后再取，
+        # clip 相对的是跳变后的值，限速完全失效，碰撞瞬间 delta
+        # 会被 max_delta 一步拉满（目标跳变 → q_des 突变）
+        delta_prev = self.delta.copy()
         # M·δẍ = F_ext - B·δẋ - K·δx
         delta_ddot = (f - self.B * self.delta_dot - self.K * self.delta) / self.M
         self.delta_dot += delta_ddot * dt
+        # 速度限幅：碰撞冲击积分出的 delta_dot 残余大，会让 delta
+        # 长期顶满 STEP_CLIP 单向漂移；截到与步增量匹配的速度上限
+        V_CLIP = 0.02  # m/s（0.5mm/步的 2 倍裕量，防饱和漂移）
+        self.delta_dot = np.clip(self.delta_dot, -V_CLIP, V_CLIP)
         self.delta += self.delta_dot * dt
-        # 限幅
+        # 偏移增量限速（每步每轴最多 STEP_CLIP），保证输出连续平滑
+        STEP_CLIP = 0.0005  # 0.5mm/步 @50Hz = 25mm/s 上限
+        self.delta = np.clip(self.delta, delta_prev - STEP_CLIP,
+                             delta_prev + STEP_CLIP)
+        # 总偏移限幅
         self.delta = np.clip(self.delta, -self.max_delta, self.max_delta)
         return self.delta.copy()
 

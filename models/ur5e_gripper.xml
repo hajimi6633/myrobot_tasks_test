@@ -29,41 +29,41 @@
       <body name="shoulder_Link" pos="0 0 0.1635">
         <inertial pos="0 0 0" mass="3.9912" diaginertia="0.01 0.02 0.02"/>
         <joint name="shoulder_pan_joint" type="hinge" axis="0 0 -1" range="-6.28 6.28"/>
-        <geom name="shoulder_pan" type="cylinder" size="0.06 0.03" material="arm_mat"/>
+        <geom name="shoulder_pan" type="cylinder" size="0.06 0.03" material="arm_mat" contype="0" conaffinity="0"/>
 
         <!-- ===== 关节2: shoulder_lift ===== -->
         <body name="upper_arm_Lift" pos="0 0 0" quat="0.49998 -0.5 -0.5 -0.500002">
           <inertial pos="0 0 0" mass="13.9447" diaginertia="0.04 0.04 0.01"/>
           <joint name="shoulder_lift_joint" type="hinge" axis="0 0 1" range="-6.28 6.28"/>
-          <geom name="shoulder_lift" type="cylinder" size="0.06 0.03" material="arm_mat"/>
+          <geom name="shoulder_lift" type="cylinder" size="0.06 0.03" material="arm_mat" contype="0" conaffinity="0"/>
           <!-- 补充：大臂连杆几何，连接 upper_arm_Lift 原点 -> forearm_Link 原点 -->
-          <geom name="upper_arm" type="capsule" fromto="0 0 0 0.6225 0 0.0155" size="0.05" material="link_mat"/>
+          <geom name="upper_arm" type="capsule" fromto="0 0 0 0.6225 0 0.0155" size="0.05" material="link_mat" contype="0" conaffinity="0"/>
 
           <!-- ===== 关节3: elbow  d3=0.0155 ===== -->
           <body name="forearm_Link" pos="0.6225 0 0.0155">
             <inertial pos="0 0 0" mass="3.6632" diaginertia="0.02 0.02 0.005"/>
             <joint name="elbow_joint" type="hinge" axis="0 0 1" range="-3.14 3.14"/>
-            <geom name="elbow" type="cylinder" size="0.05 0.025" material="arm_mat"/>
+            <geom name="elbow" type="cylinder" size="0.05 0.025" material="arm_mat" contype="0" conaffinity="0"/>
             <!-- 补充：小臂连杆几何，连接 forearm_Link 原点 -> wrist_1_Link 原点 -->
-            <geom name="forearm" type="capsule" fromto="0 0 0 0.558 0 0.149" size="0.045" material="link_mat"/>
+            <geom name="forearm" type="capsule" fromto="0 0 0 0.558 0 0.149" size="0.045" material="link_mat" contype="0" conaffinity="0"/>
 
             <!-- ===== 关节4: wrist_1  d4=0.149 ===== -->
             <body name="wrist_1_Link" pos="0.558 0 0.149" quat="0.707105 1.18758e-05 1.18759e-05 0.707108">
               <inertial pos="0 0 0" mass="1.226" diaginertia="0.005 0.005 0.002"/>
               <joint name="wrist_1_joint" type="hinge" axis="0 0 1" range="-6.28 6.28"/>
-              <geom name="wrist_1" type="cylinder" size="0.045 0.025" material="arm_mat"/>
+              <geom name="wrist_1" type="cylinder" size="0.045 0.025" material="arm_mat" contype="0" conaffinity="0"/>
 
               <!-- ===== 关节5: wrist_2  d5=-0.115 ===== -->
               <body name="wrist_2_Link" pos="0 -0.115 0" quat="0.707104 0.707072 0.000768628 -0.000775693">
                 <inertial pos="0 0 0" mass="1.1122" diaginertia="0.005 0.005 0.002"/>
                 <joint name="wrist_2_joint" type="hinge" axis="0 0 -1" range="-6.28 6.28"/>
-                <geom name="wrist_2" type="cylinder" size="0.045 0.025" material="arm_mat"/>
+                <geom name="wrist_2" type="cylinder" size="0.045 0.025" material="arm_mat" contype="0" conaffinity="0"/>
 
                 <!-- ===== 关节6: wrist_3  d6=0.115 ===== -->
                 <body name="wrist_3_Link" pos="0.0001986 0.115 0.0047139" quat="0.707494 -0.706719 3.54596e-06 3.54208e-06">
                   <inertial pos="0 0 0" mass="1.6897" diaginertia="0.002 0.002 0.001"/>
                   <joint name="wrist_3_joint" type="hinge" axis="0 0 -1" range="-6.28 6.28"/>
-                  <geom name="wrist_3" type="cylinder" size="0.04 0.02" material="arm_mat"/>
+                  <geom name="wrist_3" type="cylinder" size="0.04 0.02" material="arm_mat" contype="0" conaffinity="0"/>
 
                   <!-- 末端执行器参考点 = DH frame 6 原点 (法兰中心) -->
                   <site name="attachment_site" pos="0 0 0" rgba="1 0 0 1"/>
@@ -80,14 +80,16 @@
                     <body name="gripper_base" pos="0 0 -0.042">
                       <geom name="gripper_base" type="box" size="0.04 0.08 0.03" pos="0 0 0.00" material="grip_mat"/>
                       <!-- 代码兼容用的末端 site（两手指中点，供 IK/obs 读取）
-                           位于 gripper_base 内 z=-0.072，对应两手指几何中点高度 -->
-                      <site name="ee_link" pos="0 0 -0.072" size="0.02"/>
+                           位于 gripper_base 内 z=-0.072，对应两手指几何中点高度
+                           quat 抵消父级 ee_off 的 180° 旋转，使本 site 坐标轴
+                           与 attachment_site（= wrist_3 法兰系）对齐 -->
+                      <site name="ee_link" pos="0 0 -0.072" quat="0 -0.7071068 -0.7071068 0" size="0.02"/>
                       <body name="finger_left" pos="0 -0.0160500 -0.0874122">
-                        <joint name="ll_grasp_joint" type="slide" axis="0 1 0" range="-0.025 0.009"/>
+                        <joint name="ll_grasp_joint" type="slide" axis="0 1 0" range="-0.025 0.01"/>
                         <geom name="finger_left" type="box" size="0.02 0.005 0.04" pos="0 -0.02 0.02" material="grip_mat"/>
                       </body>
                       <body name="finger_right" pos="0 0.0160500 -0.0874122">
-                        <joint name="rl_grasp_joint" type="slide" axis="0 1 0" range="-0.009 0.025"/>
+                        <joint name="rl_grasp_joint" type="slide" axis="0 1 0" range="-0.01 0.025"/>
                         <geom name="finger_right" type="box" size="0.02 0.005 0.04" pos="0 0.02 0.02" material="grip_mat"/>
                       </body>
                     </body>
@@ -108,18 +110,18 @@
     <position joint="shoulder_pan_joint"  name="act_shoulder_pan"  ctrlrange="-6.28 6.28" forcerange="-500 500" kp="1000" dampratio="1"/>
     <position joint="shoulder_lift_joint"       name="act_shoulder_lift"       ctrlrange="-6.28 6.28" forcerange="-500 500" kp="1000" dampratio="1"/>
     <position joint="elbow_joint"         name="act_elbow"         ctrlrange="-3.14 3.14" forcerange="-500 500" kp="1000" dampratio="1"/>
-    <position joint="wrist_1_joint"       name="act_wrist_1"       ctrlrange="-6.28 6.28" forcerange="-28 28"   kp="300"  dampratio="1"/>
-    <position joint="wrist_2_joint"       name="act_wrist_2"       ctrlrange="-6.28 6.28" forcerange="-28 28"   kp="300"  dampratio="1"/>
-    <position joint="wrist_3_joint"       name="act_wrist_3"       ctrlrange="-6.28 6.28" forcerange="-28 28"   kp="300"  dampratio="1"/>
-    <position joint="ll_grasp_joint"      name="act_grasp"         ctrlrange="-0.025 0.009"     forcerange="-40 40"   kp="100"  kv="10"/>
+    <position joint="wrist_1_joint"       name="act_wrist_1"       ctrlrange="-6.28 6.28" forcerange="-56 56"   kp="300"  dampratio="1"/>
+    <position joint="wrist_2_joint"       name="act_wrist_2"       ctrlrange="-6.28 6.28" forcerange="-56 56"   kp="300"  dampratio="1"/>
+    <position joint="wrist_3_joint"       name="act_wrist_3"       ctrlrange="-6.28 6.28" forcerange="-56 56"   kp="300"  dampratio="1"/>
+    <position joint="ll_grasp_joint"      name="act_grasp"         ctrlrange="-0.025 0.01"      forcerange="-300 300" kp="100"  kv="10"/>
   </actuator>
 
   <!-- 约束：rl_grasp_joint 镜像跟随 ll_grasp_joint
        polycoef="a0 a1 ..." 约束 pos(joint1) = a0 + a1*pos(joint2)
        joint1=rl_grasp_joint, joint2=ll_grasp_joint, a0=0, a1=-1
        => qpos(rl_grasp_joint) = -qpos(ll_grasp_joint)
-       ll_grasp_joint range [-0.025,0.009], rl_grasp_joint range [-0.009,0.025]
-       闭合: qpos_l=0.009, qpos_r=-0.009 (两指向中心)
+       ll_grasp_joint range [-0.025,0.01], rl_grasp_joint range [-0.01,0.025]
+       闭合: qpos_l=0.01, qpos_r=-0.01 (两指向中心)
        张开: qpos_l=-0.025, qpos_r=0.025 (两指外扩)
        镜像开合，只需驱动 ll_grasp_joint -->
   <equality>

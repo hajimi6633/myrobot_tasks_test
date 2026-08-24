@@ -201,16 +201,33 @@ class ArmEnv:
         mat = self.data.site_xmat[sid].reshape(3, 3).copy()
         return pos, mat
 
+    def _subtree_geoms(self, bid: int) -> set:
+        """收集 body 及其全部后代 body 的 geom id 集合。
+
+        body_geomadr/body_geomnum 只覆盖直属 geom；枪头圆盘在子 body
+        gun_pan、充电插座弹片环在子 body 内，接触/力查询必须用子树
+        集合才能覆盖（否则静默漏检，导纳反馈失真）。
+        """
+        bodies = {bid}
+        # 按 id 升序单轮扩张即可：MuJoCo 中 parent id 恒小于 child id，
+        # 祖先必先于后代进入集合
+        for k in range(self.model.nbody):
+            if self.model.body_parentid[k] in bodies:
+                bodies.add(k)
+        geoms: set = set()
+        for b in bodies:
+            geoms.update(range(self.model.body_geomadr[b],
+                               self.model.body_geomadr[b] + self.model.body_geomnum[b]))
+        return geoms
+
     def body_collides_with(self, body_name: str, other_body_name: str) -> bool:
-        """判断两 body 的 geom 是否当前存在接触。"""
+        """判断两 body（含各自子树）的 geom 是否当前存在接触。"""
         b1 = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
         b2 = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, other_body_name)
         if b1 < 0 or b2 < 0:
             return False
-        g1s = set(range(self.model.body_geomadr[b1],
-                        self.model.body_geomadr[b1] + self.model.body_geomnum[b1]))
-        g2s = set(range(self.model.body_geomadr[b2],
-                        self.model.body_geomadr[b2] + self.model.body_geomnum[b2]))
+        g1s = self._subtree_geoms(b1)
+        g2s = self._subtree_geoms(b2)
         for i in range(self.data.ncon):
             c = self.data.contact[i]
             if ((c.geom1 in g1s and c.geom2 in g2s) or
@@ -219,13 +236,12 @@ class ArmEnv:
         return False
 
     def geom_body_collides(self, geom_name: str, body_name: str) -> bool:
-        """判断指定 geom 是否与某 body 的 geom 接触。"""
+        """判断指定 geom 是否与某 body（含子树）的 geom 接触。"""
         gid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom_name)
         bid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
         if gid < 0 or bid < 0:
             return False
-        gbs = set(range(self.model.body_geomadr[bid],
-                        self.model.body_geomadr[bid] + self.model.body_geomnum[bid]))
+        gbs = self._subtree_geoms(bid)
         for i in range(self.data.ncon):
             c = self.data.contact[i]
             if ((c.geom1 == gid and c.geom2 in gbs) or
@@ -236,6 +252,7 @@ class ArmEnv:
     def contact_force_between(self, body1_name: str, body2_name: str) -> np.ndarray:
         """计算 body1 受到的来自 body2 的接触力合力（世界系 [fx,fy,fz]）。
 
+        双方均含子树 geom（枪的 gun_pan、插座的弹片子 body 都计入）。
         mj_contactForce 返回接触约束力（contact frame），contact.frame 的法向
         从 geom1 指向 geom2。R@f 是作用在 geom2 上的力（推开 geom2）。
         故需要根据 geom 归属决定符号，才能得到 body1 受力。
@@ -244,10 +261,8 @@ class ArmEnv:
         b2 = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body2_name)
         if b1 < 0 or b2 < 0:
             return np.zeros(3)
-        g1s = set(range(self.model.body_geomadr[b1],
-                        self.model.body_geomadr[b1] + self.model.body_geomnum[b1]))
-        g2s = set(range(self.model.body_geomadr[b2],
-                        self.model.body_geomadr[b2] + self.model.body_geomnum[b2]))
+        g1s = self._subtree_geoms(b1)
+        g2s = self._subtree_geoms(b2)
         f_total = np.zeros(3)
         for i in range(self.data.ncon):
             c = self.data.contact[i]
