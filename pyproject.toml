@@ -15,4 +15,4 @@ rl = ["gymnasium"]
 view = ["mujoco-python-viewer"]
 
 [tool.setuptools]
-packages = ["src"]
+packages = ["src", "rclike", "rcs", "rcs.nodes", "rcs.tasks"]
