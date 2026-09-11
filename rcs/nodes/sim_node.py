@@ -98,6 +98,77 @@ class SimNode(Node):
         return (self.data.qpos[self.arm_qposadr].copy(),
                 self.data.qvel[self.arm_dofadr].copy())
 
+    # ---------- 查询（迁移自旧 ArmEnv，任务层 / done 判定用） ----------
+    def site_pose(self, name: str):
+        """site 世界位姿 (pos[3], rot_mat[3,3])。"""
+        sid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, name)
+        if sid < 0:
+            raise ValueError(f"site '{name}' not found")
+        return (self.data.site_xpos[sid].copy(),
+                self.data.site_xmat[sid].reshape(3, 3).copy())
+
+    def _subtree_geoms(self, bid: int) -> set:
+        """body 及其全部后代的 geom id 集合（枪头圆盘在子 body，
+        接触/力查询必须用子树集合，否则静默漏检）。"""
+        bodies = {bid}
+        # MuJoCo 中 parent id 恒小于 child id，单轮扩张即可
+        for k in range(self.model.nbody):
+            if self.model.body_parentid[k] in bodies:
+                bodies.add(k)
+        geoms: set = set()
+        for b in bodies:
+            geoms.update(range(self.model.body_geomadr[b],
+                               self.model.body_geomadr[b] + self.model.body_geomnum[b]))
+        return geoms
+
+    def body_collides_with(self, body_name: str, other_body_name: str) -> bool:
+        """两 body（含子树）当前是否存在接触。"""
+        b1 = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        b2 = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, other_body_name)
+        if b1 < 0 or b2 < 0:
+            return False
+        g1s, g2s = self._subtree_geoms(b1), self._subtree_geoms(b2)
+        for i in range(self.data.ncon):
+            c = self.data.contact[i]
+            if ((c.geom1 in g1s and c.geom2 in g2s) or
+                    (c.geom2 in g1s and c.geom1 in g2s)):
+                return True
+        return False
+
+    def geom_body_collides(self, geom_name: str, body_name: str) -> bool:
+        """指定 geom 是否与某 body（含子树）接触。"""
+        gid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom_name)
+        bid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        if gid < 0 or bid < 0:
+            return False
+        gbs = self._subtree_geoms(bid)
+        for i in range(self.data.ncon):
+            c = self.data.contact[i]
+            if ((c.geom1 == gid and c.geom2 in gbs) or
+                    (c.geom2 == gid and c.geom1 in gbs)):
+                return True
+        return False
+
+    def contact_force_between(self, body1_name: str, body2_name: str):
+        """body1 受到的来自 body2 的接触合力（世界系 [fx,fy,fz]）。"""
+        b1 = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body1_name)
+        b2 = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body2_name)
+        if b1 < 0 or b2 < 0:
+            return np.zeros(3)
+        g1s, g2s = self._subtree_geoms(b1), self._subtree_geoms(b2)
+        f_total = np.zeros(3)
+        for i in range(self.data.ncon):
+            c = self.data.contact[i]
+            f = np.zeros(6)
+            R = c.frame.reshape(3, 3)
+            if c.geom1 in g1s and c.geom2 in g2s:
+                mujoco.mj_contactForce(self.model, self.data, i, f)
+                f_total -= R @ f[:3]       # 法向 b1→b2，body1 受力取负
+            elif c.geom2 in g1s and c.geom1 in g2s:
+                mujoco.mj_contactForce(self.model, self.data, i, f)
+                f_total += R @ f[:3]
+        return f_total
+
     def _apply_cmd(self, cmd):
         """写 ctrl（迁移自 ArmEnv._apply_action）。cmd = (q_arm[6], grip_ratio)。"""
         q_arm, grip = cmd

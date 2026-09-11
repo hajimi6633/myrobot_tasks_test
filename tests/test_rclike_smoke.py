@@ -95,15 +95,26 @@ def test_action_suspend_resume():
 
 
 def test_frames_static_transform():
-    """TF-lite：注册 ee→gun 静态变换后，目标转换统一走 FrameTree。"""
+    """TF-lite：局部偏移随 parent 姿态旋转；旋转回退用 R.T。"""
     ft = FrameTree()
-    ft.set_static("ee", "gun", [0.1, 0.0, 0.0], np.eye(3))
-    # gun 系原点 → ee 系：应得到偏移量
-    assert np.allclose(ft.to_parent("gun", [0, 0, 0]), [0.1, 0, 0])
+    # 旧语义：ee_target = gun_target - ee_mat @ offset → t = -offset, R = R_gun_ee
+    offset = np.array([0.1, 0.0, 0.0])
+    R_gun_ee = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])  # 绕 z 转 90°
+    ft.set_static("ee", "gun", -offset, R_gun_ee)
+
+    gun_target = np.array([1.0, 0.5, 0.3])
+    ee_mat = np.eye(3)
+    expect = gun_target - ee_mat @ offset            # 旧 _gun_to_ee 公式
+    assert np.allclose(ft.to_parent("gun", gun_target, ee_mat), expect)
+
+    # 旋转回退：R_ee = R_gun_ee.T @ R_gun（旧 _gun_rot_to_ee 公式）
+    R_gun = np.eye(3)
+    assert np.allclose(ft.rot_to_parent("gun", R_gun), R_gun_ee.T @ R_gun)
+
     # 清除后不可再查（枪已归还插座）
     ft.clear("gun")
     try:
-        ft.to_parent("gun", [0, 0, 0])
+        ft.to_parent("gun", gun_target)
         assert False, "应抛 KeyError"
     except KeyError:
         pass
