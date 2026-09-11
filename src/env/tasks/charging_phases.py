@@ -20,10 +20,21 @@ HOLD_1S = int(1.0 / DT)
 GRASP_FORCE_MIN = 0.5      # 抓取成功最小夹爪力 (N)；枪柄 geom 加宽后
                            # 稳态夹持力 ~0.9N，阈值 1.0 会误判失败（枪仅
                            # ~0.1kg，0.9N 夹持 + 运动学耦合足够可靠）
-F_BLOCK = 5.0              # 插枪阻力阈值 (N)，超过则暂停主推进
-INSERT_STEP = 0.002        # 插枪名义推进步长 (m)
-INSERT_MAX_STEPS = 400     # 插枪段最大步数
+F_BLOCK = 40.0             # 插枪推进力预算 (N)：枪与弹片口近乎严丝合缝，
+                           # 被动插入策略——轴向持续给力（<40N）让枪被
+                           # 弹片漏斗导正滑入，仅超预算才回退卸力。
+                           # 原 5N：半程一碰弹片即触发卸力，力永远建立
+                           # 不起来，轴向净进度归零 → 停滞退出
+INSERT_STEP = 0.002         # 插枪名义推进步长 (m)：50Hz 下 100mm/s，
+                           # 插入 100mm 约 2s。遇阻 scale=0.1 时仍 10mm/s
+INSERT_MAX_STEPS = 400     # 归位段（5a）最大步数
+INSERT_MAX_STEPS_P3 = 800 # 插枪段（phase3）最大步数：对心 + 推进全程
+                           # 需更多步数余量（原 400，实际 ~160 步完成）
 DONE_DIST = 0.006          # 到底距离阈值 (m)
+PROGRESS_WIN = 0.0005      # 停滞判据的窗口推进量 (m)：接触期间累计推进
+                           # 达 0.5mm 重置计数——慢速推进（0.05mm/步）每
+                           # 10 步重置一次，不再误判；真卡死 5s 推不进
+                           # 0.5mm，正确触发停滞保护
 ALIGN_TOL = 0.0015         # 对心阈值：实际横向偏差低于此值才推进 (m)
                            # （弹片口与枪头间隙仅 2.5mm，必须先对心）
 ALIGN_STEP = 0.001         # 对心闭环步长 (m/步)
@@ -60,8 +71,8 @@ def _gun_to_ee(ctx: PhaseContext, gun_world: np.ndarray) -> np.ndarray:
     """gun_site 世界目标 → ee_link 世界目标。
 
     用抓取时记录的 ee_link 局部系偏移（恒定），乘以当前 ee_link 旋转矩阵
-    转回世界系。枪体经 GraspCoupler 刚性耦合到 gripper_base，ee_link 与
-    gripper_base 刚性连接，故局部偏移不随姿态变化；但世界系偏移会随姿态
+    转回世界系。枪体经 eq_gun_ee weld 刚性固定到 carry_shell，ee_link 与
+    carry_shell 刚性连接，故局部偏移不随姿态变化；但世界系偏移会随姿态
     改变，必须用当前旋转矩阵实时转换。
     """
     ee_mat = ctx.env.data.site_xmat[ctx.env.ee_site_id].reshape(3, 3)
@@ -75,10 +86,6 @@ def _gun_rot_to_ee(ctx: PhaseContext, gun_target_rot: np.ndarray) -> np.ndarray:
     故 R_ee = R_gun_ee.T @ R_gun_target，确保枪体 z 轴与目标 site z 轴平行。
     """
     return ctx.grasp_rot.T @ np.asarray(gun_target_rot, float)
-
-
-def _ctrl_dt(ctx: PhaseContext) -> float:
-    return ctx.env.n_substeps * ctx.env.model.opt.timestep
 
 
 def _move_phase(name, desc, site_name, grip, T, offset_gun=False,
@@ -227,18 +234,28 @@ def build_phase1():
     phases.append(_hold_phase("1d_hold_gun_site_1", "停留 gun_site_1",
                               Task.GUN_SITE_1, GRIP_OPEN, 1.0))
 
-    # 1e: 闭合夹爪 hold + 抓取检测 + 耦合
+    # 1e: 闭合夹爪 hold + 抓取检测 + weld 绑定
     def exit_grasp(c):
         f = c.env.gripper.get_contact_force()
         if f >= GRASP_FORCE_MIN:
-            # 解除插座 weld
+            # 解除插座 weld（仅解除约束，位置不变）
             c.constraints.set_active(Task.EQ_SOCKET, False)
-            # 耦合枪到末端（运动学跟随）
+            mujoco.mj_forward(c.env.model, c.env.data)  # 刷新 xpos/xquat
+            # 记录枪相对末端的位姿偏移（供 IK 迭代中虚拟同步使用）
             c.coupler.attach()
-            dt = _ctrl_dt(c)
+            # 激活枪-末端 weld：一步到位的物理绑定。关键：激活前把
+            # 当前相对位姿写入 eq_data——weld 默认存编译时位姿（枪在
+            # 插座、臂在 home，相差 1m+），直接激活会把枪瞬间拽向旧
+            # 位姿产生巨力跳变；写入当前值则约束残差为零，无瞬态
+            c.constraints.set_weld_relpose(Task.EQ_GUN_EE,
+                                           Task.GRIPPER_BASE_BODY, Task.GUN_BODY)
+            c.constraints.set_active(Task.EQ_GUN_EE, True)
+            # 每步后仅刷新运动学（供 site/力读取），不再 teleport 枪——
+            # 位姿保持交给 weld 约束求解器，与接触力在同一个物理循环内
+            # 解算：穿模深度由接触力-weld 力平衡限定，插枪阻力经 weld
+            # 传回臂关节（臂真实感受外力）
             c.env.add_post_step_hook(
-                lambda: (c.coupler.update(dt),
-                         mujoco.mj_forward(c.env.model, c.env.data)))
+                lambda: mujoco.mj_forward(c.env.model, c.env.data))
             mujoco.mj_forward(c.env.model, c.env.data)
             # 记录位置偏移（ee_link 局部系，恒定）与旋转关系
             gun_p, gun_mat = c.env.site_pose(Task.GUN_SITE)
@@ -359,10 +376,11 @@ def build_phase3():
         c.admittance.delta_dot[:] = ax * float(v_ @ ax)
         actual_gun = st["nominal"] + c.admittance.delta
         # 目标变化限幅：碰撞瞬间 nominal 搜索/导纳 delta 若有残余突变，
-        # 截断单步目标变化量，防止 IK 输入跳变传导为 q_des 跳变
+        # 截断单步目标变化量，防止 IK 输入跳变传导为 q_des 跳变。
+        # 5mm：容纳名义推进 2mm + 对心修正 1mm + 导纳 0.5mm + 裕量
         prev_actual = st["prev_actual"]
         if prev_actual is not None:
-            MAX_TARGET_STEP = 0.003  # 容纳 nominal 2mm + 导纳 0.5mm + 裕量
+            MAX_TARGET_STEP = 0.005
             diff = actual_gun - prev_actual
             dnorm = np.linalg.norm(diff)
             if dnorm > MAX_TARGET_STEP:
@@ -376,11 +394,11 @@ def build_phase3():
         q_init = _prev_q if _prev_q is not None else q_cur
         # 对 gun_site 求 IK，同时用 z 轴对齐约束枪体姿态（小步长微调，
         # 不约束绕 z 自转，避免大腕关节旋转）。retry=False：闭环实时段
-        # 禁用多起点重试；max_travel=0.1：姿态欠收敛时 IK 零空间漂移
-        # 曾达 0.76rad/步，硬性截断保证单步 q_des 变化有界
+        # 禁用多起点重试；max_travel=0.005：姿态欠收敛时 IK 零空间漂移
+        # 曾达 0.76rad/步，硬性截断保证 q_des 单步变化有界
         q_des = c.ik.solve(actual_gun, target_rot=car1_mat, q_init=q_init,
                            site_id=c.gun_site_id, z_align_only=True,
-                           retry=False, max_travel=0.1)
+                           retry=False, max_travel=0.005)
         st["prev_q_des"] = q_des.copy()
         # 低频诊断：接触力、名义目标、导纳偏移、单步关节变化量
         if i % 20 == 0 or f_mag > 100:
@@ -430,20 +448,23 @@ def build_phase3():
         if dist < DONE_DIST:
             c.phase_msg = "插枪到底：到达 car_site_done"
             return True
-        # 停滞检测：枪体接触 car_socket 且距离不再减小
+        # 停滞检测（窗口式累计进展）：接触 car_socket 期间，相对计数
+        # 起点的累计推进 ≥ PROGRESS_MM 才重置计数。原逐步判据（每步比
+        # 历史最小值再进 0.1mm）在遇阻慢速推进时（scale 低至 0.1 时
+        # 仅 0.05mm/步 < 0.1mm 门槛）永远不重置，稳定推进被误判停滞
         if c.env.body_collides_with(Task.GUN_BODY, Task.CAR_SOCKET_BODY):
-            if dist < st["prev_dist"] - 1e-4:
+            if dist < st["prev_dist"] - PROGRESS_WIN:  # 窗口累计推进达标
                 st["blocked_n"] = 0
+                st["prev_dist"] = dist  # 更新窗口起点（非历史最小值）
             else:
                 st["blocked_n"] += 1
-            st["prev_dist"] = min(st["prev_dist"], dist)
-            if st["blocked_n"] > 30:  # 约 1.5s 无进展
+            if st["blocked_n"] > 100:  # 约 5s 累计推进 < 0.5mm 才算停滞
                 c.phase_msg = "插枪停滞：接触 car_socket 且无进展"
                 return True
         return False
 
     return [Phase(name="phase3_insert", desc="导纳插枪",
-                  trajectory=None, n_steps=INSERT_MAX_STEPS,
+                  trajectory=None, n_steps=INSERT_MAX_STEPS_P3,
                   grip_ratio=GRIP_CLOSE, on_enter=enter, on_step=step,
                   done_condition=done, monitor_force=True, use_admittance=True)]
 
@@ -504,9 +525,12 @@ def build_phase5():
             q_back = c.ik.solve(back_pos, target_rot=None, q_init=q_cur,
                                 site_id=c.gun_site_id)
             c.env.data.qpos[c.env.arm_qposadr] = q_back
-            # 必须先 mj_forward 更新 xpos，coupler.update 才能读到正确的锚点位姿
+            # 必须先 mj_forward 更新 xpos，coupler.update 才能读到正确的锚点位姿。
+            # dt=0：仅同步枪位姿、不写差分 qvel——weld 已激活，向物理状态
+            # 注入传送速度会被 weld 当作扰动拉扯（传送结果本身与 weld
+            # 期望位姿一致，无约束残差）
             mujoco.mj_forward(c.env.model, c.env.data)
-            c.coupler.update(c.dt_ctrl)
+            c.coupler.update(0.0)
             mujoco.mj_forward(c.env.model, c.env.data)
             gun_after = c.env.site_pose(Task.GUN_SITE)[0].copy()
             gun_mat_after = c.env.site_pose(Task.GUN_SITE)[1].copy()
@@ -578,7 +602,7 @@ def build_phase5():
         # 锁 z 轴平行保证轴向插入，枪头端面平顶到位盘
         q_des = c.ik.solve(actual, target_rot=cs1_mat, q_init=q_init,
                            site_id=c.gun_site_id, z_align_only=True,
-                           retry=False, max_travel=0.1)
+                           retry=False, max_travel=0.02)
         st["prev_q_des"] = q_des.copy()
         if i < 3 or f_mag > 10:
             dq = np.max(np.abs(q_des - q_cur))
@@ -602,16 +626,18 @@ def build_phase5():
         if dist < 0.05:
             c.phase_msg = f"枪体归位：接近 charing_site_1 ({dist:.4f}m)"
             return True
-        # 停滞检测：枪接触充电插座且无进展
+        # 停滞检测（窗口式累计进展，同 phase3）：接触期间相对计数起点
+        # 累计推进 ≥ 0.5mm 才重置——原逐步判据（0.1mm/步）在慢速推进
+        # （INSERT_STEP_SLOW=0.6mm×scale<0.17mm/步）下必然误判停滞
         in_contact = (c.env.geom_body_collides(Task.GUN_COL_6, Task.SOCKET_BODY) or
                       c.env.body_collides_with(Task.GUN_BODY, Task.SOCKET_BODY))
         if in_contact:
-            if dist < st.get("prev_dist_a", 1e9) - 1e-4:
+            if dist < st.get("prev_dist_a", 1e9) - PROGRESS_WIN:
                 st["blocked_a"] = 0
+                st["prev_dist_a"] = dist  # 更新窗口起点（非历史最小值）
             else:
                 st["blocked_a"] = st.get("blocked_a", 0) + 1
-            st["prev_dist_a"] = min(st.get("prev_dist_a", 1e9), dist)
-            if st.get("blocked_a", 0) > 30:
+            if st.get("blocked_a", 0) > 100:  # 约 5s 累计推进 < 0.5mm
                 c.phase_msg = f"枪体归位：停滞（接触插座，距 cs1={dist:.4f}m）"
                 return True
         return False
@@ -667,7 +693,7 @@ def build_phase5():
         # 防推进中姿态漂移导致枪头歪斜蹭碰
         q_des = c.ik.solve(actual, target_rot=cs1_mat, q_init=q_init,
                            site_id=c.gun_site_id, z_align_only=True,
-                           retry=False, max_travel=0.1)
+                           retry=False, max_travel=0.02)
         stb["prev_q_des"] = q_des.copy()
         if i % 20 == 0 or f_mag > 10:
             dq = float(np.max(np.abs(q_des - q_cur)))
@@ -725,12 +751,19 @@ def build_phase5():
             return True
         return False
 
-    # 5b 结束后激活插座 weld + 解除耦合
+    # 5b 结束后：枪固定回插座 + 解除末端 weld
     def exit_b(c):
+        # 先把当前枪-插座相对位姿写入插座 weld 再激活——eq_data 里的
+        # 编译时旧值与插入结束的实际位姿有偏差，直接激活会瞬间拉扯
+        # 枪体（曾致 5b 结束瞬间 3 万 N 冲击）。顺序：先开插座 weld
+        # 再关末端 weld，枪任何时刻都至少被一个 weld 持有（不悬空掉落）
+        c.constraints.set_weld_relpose(Task.EQ_SOCKET,
+                                       Task.SOCKET_BODY, Task.GUN_BODY)
+        c.constraints.set_active(Task.EQ_SOCKET, True)
+        c.constraints.set_active(Task.EQ_GUN_EE, False)
+        mujoco.mj_forward(c.env.model, c.env.data)
         c.coupler.detach()
         c.env.clear_post_step_hooks()
-        c.constraints.set_active(Task.EQ_SOCKET, True)
-        mujoco.mj_forward(c.env.model, c.env.data)
         c.phase_msg = "枪体归位，激活插座 weld"
 
     return [
@@ -759,7 +792,12 @@ def build_phase6(home_qpos):
     def step_open(c, i):
         return c.env.data.qpos[c.env.arm_qposadr].copy()
 
-    # 6b: 回 home
+    # 6b: 末端运动到 gun_site_2（枪已归还插座且夹爪松开后，末端先撤到
+    # 枪柄尾部接近点，再复位；避免直接回 home 的路径扫过枪体/插座）
+    to_gun_site_2 = _move_phase("phase6b_to_gun_site_2", "末端运动到 gun_site_2",
+                                Task.GUN_SITE_2, GRIP_OPEN, 2.0)
+
+    # 6c: 回 home
     def enter_home(c):
         q0 = c.env.data.qpos[c.env.arm_qposadr].copy()
         wp = min_jerk(q0, home_qpos, 2.0, c.dt_ctrl)
@@ -772,7 +810,8 @@ def build_phase6(home_qpos):
         Phase(name="phase6a_open_gripper", desc="松开夹爪",
               trajectory=None, n_steps=HOLD_1S, grip_ratio=GRIP_OPEN,
               on_enter=enter_open, on_step=step_open),
-        Phase(name="phase6b_home", desc="机械臂复位",
+        to_gun_site_2,
+        Phase(name="phase6c_home", desc="机械臂复位",
               trajectory=None, n_steps=int(2.0 / DT), grip_ratio=GRIP_OPEN,
               on_enter=enter_home, on_step=step_home),
     ]

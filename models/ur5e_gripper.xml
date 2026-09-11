@@ -73,15 +73,15 @@
                   </body>
 
                   <!-- offset6: a5=0, α5=90° (末端坐标系) -->
-                  <body name="ee_off" pos="0 0 0" quat="0 0.7071068 0.7071068 0">
+                  <body name="finger_base" pos="0 0 0" quat="0 0.7071068 0.7071068 0">
                     <inertial pos="0 0 0" mass="1.5714" diaginertia="0.001 0.001 0.001"/>
 
                     <!-- ===== 二指平行夹爪 ===== -->
-                    <body name="gripper_base" pos="0 0 -0.042">
-                      <geom name="gripper_base" type="box" size="0.04 0.08 0.03" pos="0 0 0.00" material="grip_mat"/>
+                    <body name="carry_shell" pos="0 0 -0.042">
+                      <geom name="carry_shell" type="box" size="0.04 0.08 0.03" pos="0 0 0.00" material="grip_mat"/>
                       <!-- 代码兼容用的末端 site（两手指中点，供 IK/obs 读取）
-                           位于 gripper_base 内 z=-0.072，对应两手指几何中点高度
-                           quat 抵消父级 ee_off 的 180° 旋转，使本 site 坐标轴
+                           位于 carry_shell 内 z=-0.072，对应两手指几何中点高度
+                           quat 抵消父级 finger_base 的 180° 旋转，使本 site 坐标轴
                            与 attachment_site（= wrist_3 法兰系）对齐 -->
                       <site name="ee_link" pos="0 0 -0.072" quat="0 -0.7071068 -0.7071068 0" size="0.02"/>
                       <body name="finger_left" pos="0 -0.0160500 -0.0874122">

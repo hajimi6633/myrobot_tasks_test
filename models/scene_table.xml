@@ -110,11 +110,15 @@
 
   <!-- 焊接约束：
        eq_socgun_1: 充电枪 1 固定到充电插座（初始 active=true，抓取后置 false）
-       eq_gun_ee: 充电枪 1 固定到末端 gripper_base（初始 active=false，抓取成功后置 true，
-                  代码会在激活瞬间写入当前相对位姿，保证 weld 保持抓取姿态） -->
+       eq_gun_ee: 充电枪 1 固定到末端 carry_shell（初始 active=false，抓取成功后置 true，
+                  代码会在激活瞬间写入当前相对位姿，保证 weld 保持抓取姿态。
+                  solref=0.004（默认 0.02 的 1/5，刚度约 25 倍）：枪与插座口
+                  近乎严丝合缝，软 weld 会让枪在插枪阻力下后缩/歪斜
+                  （实测后缩 13mm、歪 1.4°，导致卡口停滞）；
+                  0.004=2×timestep，为稳定下限） -->
   <equality>
     <weld name="eq_socgun_1" body1="charing_socket" body2="charging_gun_1" active="true" anchor="0 0 0"/>
-    <weld name="eq_gun_ee" body1="gripper_base" body2="charging_gun_1" active="false" anchor="0 0 0"/>
+    <weld name="eq_gun_ee" body1="carry_shell" body2="charging_gun_1" active="false" anchor="0 0 0" solref="0.004 1"/>
   </equality>
 
   <!-- 六维力传感器：读取作用在 gun_site 所在 body(charging_gun_1) 上的合力/合力矩

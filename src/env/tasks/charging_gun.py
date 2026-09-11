@@ -1,12 +1,12 @@
 """充电枪抓取-插拔长序列任务（6 阶段，解耦设计）。
 
 阶段流程：
-  1. 抓取充电枪（gun_site_2 → gun_site_1 → 闭合 → 解除插座 weld → 耦合到末端）
+  1. 抓取充电枪（gun_site_2 → gun_site_1 → 闭合 → 解除插座 weld → 激活枪-末端 weld）
   2. 移动（gun_site → charing_site_2 → car_site_2）
   3. 插枪（导纳控制，遇阻调整，到底检测）
   4. 拔枪（gun_site → car_site_2 → charing_site_2）
   5. 枪体归位（导纳控制，gun_site → charing_site_1 → 下移 → 激活插座 weld）
-  6. 机械臂复位（松开夹爪 → 回 home）
+  6. 机械臂复位（松开夹爪 → 末端到 gun_site_2 → 回 home）
 
 每个阶段封装为 Phase dataclass，独立 setup/step/exit，便于后续插入新阶段。
 """
@@ -35,8 +35,8 @@ class PhaseContext:
     # 利用枪体延伸臂展，避免 gun↔ee 偏移转换导致 ee 目标超出工作空间
     gun_site_id: int = -1
     # 抓取后 gun_site 相对 ee_link 的偏移，存于 ee_link 局部坐标系（恒定）。
-    # 因枪体经 GraspCoupler 刚性耦合到 gripper_base，ee_link 与 gripper_base
-    # 刚性连接，故该局部偏移不随机械臂姿态变化。转换时用当前 ee_link 旋转
+    # 因枪体经 eq_gun_ee weld 刚性固定到 carry_shell，ee_link 与 carry_shell
+    # 刚性连接，故局部偏移不随机械臂姿态变化。转换时用当前 ee_link 旋转
     # 矩阵旋转回世界系：ee_target = gun_target - R_ee @ offset_local。
     ee_to_gun_offset: np.ndarray = field(default_factory=lambda: np.zeros(3))
     # 抓取时 gun_site 相对 ee_link 的旋转 R_gun_ee = R_gun @ R_ee.T，
@@ -80,7 +80,7 @@ class ChargingGunTask(BaseTask):
     GUN_BODY = "charging_gun_1"
     SOCKET_BODY = "charing_socket"
     CAR_SOCKET_BODY = "car_socket"
-    GRIPPER_BASE_BODY = "gripper_base"
+    GRIPPER_BASE_BODY = "carry_shell"
     GUN_SITE = "gun_site"
     GUN_SITE_1 = "gun_site_1"
     GUN_SITE_2 = "gun_site_2"
@@ -90,6 +90,9 @@ class ChargingGunTask(BaseTask):
     CAR_SITE_2 = "car_site_2"
     CAR_SITE_DONE = "car_site_done"
     EQ_SOCKET = "eq_socgun_1"     # 枪-插座 weld
+    # 枪-末端 weld：抓取后激活（激活前须先写当前相对位姿，见
+    # ConstraintManager.set_weld_relpose），作为枪的物理固定
+    EQ_GUN_EE = "eq_gun_ee"
     GUN_COL_6 = "gun_col_6"
     # 枪头圆盘子 body（无 joint，随枪刚性运动）。插入成功判定：
     # gun_pan 与 car_socket 发生接触（枪头已深入插座到底）

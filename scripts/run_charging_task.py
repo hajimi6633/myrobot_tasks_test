@@ -35,7 +35,11 @@ def main():
     constraints = ConstraintManager(env.model, env.data)
     coupler = GraspCoupler(env.model, env.data,
                            ChargingGunTask.GUN_BODY, ChargingGunTask.GRIPPER_BASE_BODY)
-    admittance = AdmittanceController(mass=1.0, stiffness=150.0,
+    # stiffness=1000（原 150）：导纳稳态退让 δ=f/K。150 时 9N 阻力即退
+    # 60mm，且增速(0.5mm/步)快于名义推进(0.17mm/步)，插枪段净后退；
+    # 1000 时同阻力仅退 9mm 且数步内平衡为常值偏移，名义推进得以转化
+    # 为实际插入。数值稳定性：ω·dt=sqrt(K/M)·0.05≈1.58<2，显式积分稳定
+    admittance = AdmittanceController(mass=1.0, stiffness=1000.0,
                                       damping_ratio=1.0, max_delta=0.05)
     ctrl_dt = env.n_substeps * env.model.opt.timestep
 
@@ -188,7 +192,7 @@ def main():
         # 用于区分"控制器跟踪滞后"与"物理卡住（碰撞）"
         arm_bodies = {"shoulder_Link", "upper_arm_Lift", "forearm_Link",
                       "wrist_1_Link", "wrist_2_Link", "wrist_3_Link",
-                      "ee_off", "gripper_base", "finger_left", "finger_right"}
+                      "finger_base", "carry_shell", "finger_left", "finger_right"}
         hits = {}
         for ci in range(env.data.ncon):
             c = env.data.contact[ci]

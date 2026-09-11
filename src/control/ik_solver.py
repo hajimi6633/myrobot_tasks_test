@@ -8,7 +8,7 @@
 支持耦合体（GraspCoupler）：当 site_id 指向被耦合物体上的 site 时，
 迭代中每次修改 arm qpos 后同步更新物体 freejoint，使该 site 的
 位姿跟随臂运动。由于 freejoint 不在臂运动链中，mj_jacSite 返回的
-雅可比为零，此处改用解析雅可比：通过锚点 body（gripper_base）的
+雅可比为零，此处改用解析雅可比：通过锚点 body（carry_shell）的
 雅可比 + 刚性偏移叉乘推导耦合 site 的雅可比。
 """
 from __future__ import annotations
@@ -56,7 +56,7 @@ class IKSolver:
     def _coupled_jac(self, sid: int, jacp: np.ndarray, jacr: np.ndarray):
         """解析计算耦合体上 site 的雅可比。
 
-        被耦合物体经 GraspCoupler 刚性绑定到锚点 body（gripper_base），
+        被耦合物体经 GraspCoupler 刚性绑定到锚点 body（carry_shell），
         site 位姿 = 锚点位姿 + 刚性偏移。mj_jacSite 对 freejoint 体返回
         零雅可比（不在臂运动链中），故改用锚点 body 雅可比推导：
           J_pos_site = J_pos_anchor - skew(offset_world) @ J_rot_anchor
@@ -228,6 +228,7 @@ class IKSolver:
         """
         m, d = self.env.model, self.env.data
         qpos_backup = d.qpos.copy()  # 备份仿真状态
+        qvel_backup = d.qvel.copy()  # qvel 会被迭代中的耦合器 update 写入
         rng = np.random.default_rng(0)  # 固定种子保证可重复
         VERIFY_TOL = 1e-3    # 位置验证阈值 (m)
         ROT_TOL_DEG = 2.0    # 姿态验证阈值 (deg)
@@ -309,9 +310,18 @@ class IKSolver:
                       f"(目标={np.round(target_pos,4)}){tag}")
             q_sol = best_q
         finally:
-            # 复原仿真状态，避免 IK 修改 data.qpos 影响仿真
+            # 复原仿真状态，避免 IK 修改 data.qpos/qvel 影响仿真。
+            # qvel 还原 + 耦合器 resync 是根治"阶段起始反向抽动"的关键：
+            # IK 迭代经 _sync_coupled 把枪体 _prev_qpos 留在"虚拟枪位姿"
+            # （距真实位姿可达 0.3~1m），若只还原 qpos，阶段第一步的
+            # post-step hook 会用该陈旧基准算出巨大差分速度写入枪 qvel
+            # （曾实测 9~21m/s），下一步物理仿真中枪被高速发射刮碰夹爪，
+            # 机械臂末端出现反向抽动
             d.qpos[:] = qpos_backup
+            d.qvel[:] = qvel_backup
             mujoco.mj_forward(m, d)
+            if self.coupler is not None and self.coupler.attached:
+                self.coupler.resync()
         # 行程硬限制：姿态欠收敛时 IK 的零空间漂移会让解离 q_init 很远
         # （曾出现 0.76rad/步），此处沿解方向等比缩放截断到 max_travel，
         # 保证闭环段 q_des 单步变化有界；截断欠收敛由下一步闭环自纠
